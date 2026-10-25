@@ -7,7 +7,7 @@
         <title id="pageTitle">Social Empires</title>
         <link rel="shortcut icon" href="img/icon.gif"/>
         <link rel="icon" type="image/png" href="img/icon.gif"/>
-        <script>window.RufflePlayer = window.RufflePlayer || {}; var BIG = !new URLSearchParams(location.search).has("small"); if (BIG) document.documentElement.classList.add("big"); window.RufflePlayer.config = Object.assign({publicPath: "/ruffle/", autoplay: "on", unmuteOverlay: "hidden", logLevel: "warn"}, BIG ? {scale: "noScale", forceScale: true, salign: "tl", forceAlign: true} : {});</script>
+        <script>window.RufflePlayer = window.RufflePlayer || {}; var BIG = !new URLSearchParams(location.search).has("small"); var MAXW = (function () { var m = new URLSearchParams(location.search).get("max"); return m === "none" ? 0 : (parseInt(m, 10) || 1200); })(); if (BIG) document.documentElement.classList.add("big"); window.RufflePlayer.config = Object.assign({publicPath: "/ruffle/", autoplay: "on", unmuteOverlay: "hidden", logLevel: "warn"}, BIG ? {scale: "noScale", forceScale: true, salign: "tl", forceAlign: true} : {});</script>
         <script src="/ruffle/ruffle.js"></script>
         <style>
             /* Full-window mode (default). Use ?small for the original 760x600 page. */
@@ -97,7 +97,7 @@
             <script>
                 var ruffle = window.RufflePlayer.newest(),
                 player = Object.assign(document.getElementById("ruffle").appendChild(ruffle.createPlayer()), {
-                    style: BIG ? 'position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; background-color: #669C2C; display: block;' : 'width: 760px; height: 600px; background-color: #669C2C;',
+                    style: BIG ? 'position: fixed; top: 0; bottom: 0; left: 0; right: 0; margin: 0 auto; width: ' + (MAXW ? 'min(100vw, ' + MAXW + 'px)' : '100vw') + '; height: 100vh; height: 100dvh; background-color: #669C2C; display: block;' : 'width: 760px; height: 600px; background-color: #669C2C;',
                 });
                 player.load({ // https://ruffle.rs/js-docs/master/interfaces/URLLoadOptions.html
                     url: "http://{{SERVERIP}}:5050/default01.static.socialpointgames.com/static/socialempires/flash/SELoader.swf?swftoload=http://{{SERVERIP}}:5050/default01.static.socialpointgames.com/static/socialempires/flash/{{GAMEVERSION}}",
