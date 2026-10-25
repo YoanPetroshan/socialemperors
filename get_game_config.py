@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import jsonpatch
+import soulmixer
 from time_scale import get_time_scale
 from bundle import MODS_DIR, CONFIG_DIR, CONFIG_PATCH_DIR
 
@@ -68,6 +69,9 @@ def patch_game_config():
 
     remove_duplicate_items()
 
+    # Data the Soul Mixer needs (see soulmixer.py)
+    soulmixer.augment_config(__game_config)
+
 print (" [+] Applying config patches and mods...")
 patch_game_config()
 
@@ -85,7 +89,7 @@ def get_client_game_config() -> dict:
     if scale not in __scaled_config_cache:
         scaled = copy.deepcopy(__game_config)
         for item in scaled["items"]:
-            for key in ("activation", "expiration"):
+            for key in ("activation", "expiration", "sm_training_time", "training_time"):
                 if key in item and float(item[key]) > 0:
                     item[key] = f"{float(item[key]) / scale:.6g}"
         __scaled_config_cache.clear()

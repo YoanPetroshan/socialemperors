@@ -3,6 +3,7 @@ import json
 from sessions import session, save_session
 from get_game_config import get_game_config, get_level_from_xp, get_name_from_item_id, get_attribute_from_mission_id, get_xp_from_level, get_attribute_from_item_id, get_item_from_subcat_functional
 from constants import Constant
+import soulmixer
 from engine import apply_cost, apply_collect, apply_collect_xp, timestamp_now
 
 def get_strategy_type(id):
@@ -543,6 +544,21 @@ def do_command(USERID, cmd, args):
         # save["maps"]["lastQuestTimes"] [quest_id] = TODO min (... , duration_sec)
 
         print(f"Ended quest {quest_id}.")
+
+    elif cmd in (Constant.CMD_PUSH_QUEUE_UNIT, Constant.CMD_POP_QUEUE_UNIT, Constant.CMD_UNQUEUE_UNIT,
+                 Constant.CMD_SPEED_UP_QUEUE, Constant.CMD_SOUL_MIXER_POWERUP):
+        # Soul Mixer only (see soulmixer.py); other buildings' queues are still not handled.
+        if cmd == Constant.CMD_PUSH_QUEUE_UNIT:
+            handled = soulmixer.push_queue_unit(save, args)
+        elif cmd == Constant.CMD_POP_QUEUE_UNIT:
+            handled = soulmixer.pop_queue_unit(save, args)
+        elif cmd == Constant.CMD_UNQUEUE_UNIT:
+            handled = soulmixer.unqueue_unit(save, args)
+        elif cmd == Constant.CMD_SPEED_UP_QUEUE:
+            handled = soulmixer.speed_up_queue(save, args, {int(i["id"]): i for i in get_game_config()["items"]})
+        else:
+            handled = soulmixer.buy_powerups(save, args)
+        print("Soul Mixer" if handled else f"Unhandled queue command '{cmd}' (not a Soul Mixer)", args)
 
     elif cmd == Constant.CMD_ADD_COLLECTABLE:
         collection_id = args[0]
