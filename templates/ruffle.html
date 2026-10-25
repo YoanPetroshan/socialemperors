@@ -7,8 +7,13 @@
         <title id="pageTitle">Social Empires</title>
         <link rel="shortcut icon" href="img/icon.gif"/>
         <link rel="icon" type="image/png" href="img/icon.gif"/>
-        <script src="https://unpkg.com/@ruffle-rs/ruffle/ruffle.js"></script>
-        <!--<script src="https://cdn.jsdelivr.net/npm/@ruffle-rs/ruffle/ruffle.js"></script>-->
+        <script>window.RufflePlayer = window.RufflePlayer || {}; var BIG = !new URLSearchParams(location.search).has("small"); if (BIG) document.documentElement.classList.add("big"); window.RufflePlayer.config = Object.assign({publicPath: "/ruffle/", autoplay: "on", unmuteOverlay: "hidden", logLevel: "warn"}, BIG ? {scale: "noScale", forceScale: true, salign: "tl", forceAlign: true} : {});</script>
+        <script src="/ruffle/ruffle.js"></script>
+        <style>
+            /* Full-window mode (default). Use ?small for the original 760x600 page. */
+            html.big, html.big body { margin: 0; padding: 0; overflow: hidden; background: #669C2C; }
+            html.big #header, html.big #gameBar { display: none; }
+        </style>
     </head>
     <body style="font-family: 'lucida grande',tahoma,verdana,arial,sans-serif">
     <center>
@@ -92,9 +97,7 @@
             <script>
                 var ruffle = window.RufflePlayer.newest(),
                 player = Object.assign(document.getElementById("ruffle").appendChild(ruffle.createPlayer()), {
-                    width: 760,
-                    height: 600,
-                    style: 'width: 760px; height: 600px; background-color: #669C2C;',
+                    style: BIG ? 'position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; background-color: #669C2C; display: block;' : 'width: 760px; height: 600px; background-color: #669C2C;',
                 });
                 player.load({ // https://ruffle.rs/js-docs/master/interfaces/URLLoadOptions.html
                     url: "http://{{SERVERIP}}:5050/default01.static.socialpointgames.com/static/socialempires/flash/SELoader.swf?swftoload=http://{{SERVERIP}}:5050/default01.static.socialpointgames.com/static/socialempires/flash/{{GAMEVERSION}}",
@@ -113,7 +116,7 @@
                         &sex=m&brk=0\
                         &lastLoggedIn=1349266517&brk=0\
                         &dailyBonus=0&brk=0\
-                        &friendsInfo[{"first_name":"AcidCaos","uid":"100000","pic_square":"http://{{SERVERIP}}:5050/img/profile/x.jpg"}}]&brk=0\
+                        &friendsInfo={{friendsInfo | tojson}}&brk=0\
                         &serverTime={{serverTime}}&brk=0\
                         &forceSyncError=1&brk=0\
                         &forceAttackReload=0&brk=0\
@@ -122,5 +125,59 @@
             </script>
         </object>
     </center>
-    </body>
+    
+    <!-- LOCAL CHEAT PANEL: instant free "purchases". Talks to /cheat/grant on this machine only. -->
+    <style>
+        #cheatToggle { position: fixed; right: 8px; bottom: 8px; z-index: 10; width: 30px; height: 30px; border-radius: 50%;
+            border: 2px solid #6e5335; background: #f5e36b; font: bold 16px sans-serif; cursor: pointer; opacity: .75; }
+        #cheatToggle:hover { opacity: 1; }
+        #cheatPanel { position: fixed; right: 8px; bottom: 46px; z-index: 10; display: none; width: 210px; padding: 10px;
+            background: #fff5c8; border: 2px solid #6e5335; border-radius: 8px; font: 12px sans-serif; color: #222; }
+        #cheatPanel button { margin: 2px 2px 2px 0; padding: 3px 6px; font-size: 12px; cursor: pointer; }
+        #cheatPanel .row { margin-bottom: 6px; } #cheatPanel b { display: block; margin-bottom: 2px; }
+        #cheatMsg { min-height: 14px; font-size: 11px; color: #555; }
+    </style>
+    <button id="cheatToggle" title="Free resources (local only)">$</button>
+    <div id="cheatPanel">
+        <b>Free resources (local only)</b>
+        <div id="cheatRows"></div>
+        <div class="row"><button data-act='{"action":"level","delta":1}'>Level +1</button>
+            <button data-act='{"action":"max_level"}'>Max level</button></div>
+        <div id="cheatMsg">The game reloads after each change.</div>
+    </div>
+    <script>
+        (function () {
+            var rows = [["gold", "Gold"], ["wood", "Wood"], ["stone", "Stone"], ["food", "Food"], ["cash", "Cash"]];
+            var amounts = {cash: [100, 1000], def: [10000, 100000]};
+            var box = document.getElementById("cheatRows");
+            rows.forEach(function (r) {
+                var a = amounts[r[0]] || amounts.def, div = document.createElement("div");
+                div.className = "row"; div.innerHTML = "<b>" + r[1] + "</b>";
+                a.forEach(function (n) {
+                    var btn = document.createElement("button");
+                    btn.textContent = "+" + n.toLocaleString("en-US");
+                    btn.dataset.act = JSON.stringify({action: "add", resource: r[0], amount: n});
+                    div.appendChild(btn);
+                });
+                box.appendChild(div);
+            });
+            var msg = document.getElementById("cheatMsg"), panel = document.getElementById("cheatPanel");
+            document.getElementById("cheatToggle").onclick = function () {
+                panel.style.display = panel.style.display === "block" ? "none" : "block";
+            };
+            panel.addEventListener("click", function (e) {
+                if (!e.target.dataset || !e.target.dataset.act) return;
+                msg.textContent = "Working...";
+                fetch("/cheat/grant", {method: "POST", headers: {"Content-Type": "application/json"}, body: e.target.dataset.act})
+                    .then(function (r) { return r.json().then(function (j) { return [r.ok, j]; }); })
+                    .then(function (res) {
+                        if (!res[0]) { msg.textContent = "Error: " + (res[1].error || "failed"); return; }
+                        msg.textContent = "Done. Reloading...";
+                        setTimeout(function () { location.reload(); }, 1500);
+                    })
+                    .catch(function (err) { msg.textContent = "Error: " + err; });
+            });
+        })();
+    </script>
+</body>
 </html>

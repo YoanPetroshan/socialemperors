@@ -1,6 +1,8 @@
+import copy
 import json
 import os
 import jsonpatch
+from time_scale import get_time_scale
 from bundle import MODS_DIR, CONFIG_DIR, CONFIG_PATCH_DIR
 
 __game_config = json.load(open(os.path.join(CONFIG_DIR, "game_config_20120826.json"), 'r', encoding='utf-8'))
@@ -71,6 +73,25 @@ patch_game_config()
 
 def get_game_config() -> dict:
     return __game_config
+
+__scaled_config_cache = {}
+
+def get_client_game_config() -> dict:
+    """Config sent to the game client, with item timers (activation, expiration) divided by TIME_SCALE.
+    The server-side config and the saves are never modified, so the scale can be changed at any time."""
+    scale = get_time_scale()
+    if scale == 1.0:
+        return __game_config
+    if scale not in __scaled_config_cache:
+        scaled = copy.deepcopy(__game_config)
+        for item in scaled["items"]:
+            for key in ("activation", "expiration"):
+                if key in item and float(item[key]) > 0:
+                    item[key] = f"{float(item[key]) / scale:.6g}"
+        __scaled_config_cache.clear()
+        __scaled_config_cache[scale] = scaled
+        print(f" [+] TIME_SCALE = {scale}: item timers sent to the client divided by {scale}")
+    return __scaled_config_cache[scale]
 
 def game_config() -> dict:
     return get_game_config()

@@ -16,6 +16,12 @@ def get_strategy_type(id):
         return "Aggressive"
     return "Unknown Strategy"
 
+def find_item(map: dict, id, x, y):
+    for item in map["items"]:
+        if item[0] == id and item[1] == x and item[2] == y:
+            return item
+    return None
+
 def command(USERID, data):
     timestamp = data["ts"]
     first_number = data["first_number"]
@@ -93,6 +99,11 @@ def do_command(USERID, cmd, args):
         print("Collect", str(get_name_from_item_id(id)))
         map = save["maps"][town_id]
         apply_collect(save["playerInfo"], map, id, resource_multiplier)
+        # Restart the production timer: the client computes readiness from item[4], so without this
+        # reloading the game would make the building ready again immediately.
+        collected_item = find_item(map, id, x, y)
+        if collected_item is not None:
+            collected_item[4] = timestamp_now()
         save["playerInfo"]["cash"] = max(save["playerInfo"]["cash"] - cash_to_substract, 0)
     
     elif cmd == Constant.CMD_SELL:
@@ -160,6 +171,8 @@ def do_command(USERID, cmd, args):
             if item[1] == b_x and item[2] == b_y:
                 if len(item) < 7:
                     item += [[]]
+                if not item[6] and float(get_attribute_from_item_id(item[0], "activation") or 0) > 0:
+                    item[4] = timestamp_now() # first worker starts the production timer
                 item[6] += [unit_id]
                 break
         # Remove unit

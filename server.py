@@ -1,7 +1,8 @@
 print (" [+] Loading basics...")
 import os
 import json
-import urllib
+import urllib.request
+import urllib.error
 if os.name == 'nt':
     os.system("color")
     os.system("title Social Empires Server")
@@ -10,17 +11,19 @@ else:
     sys.stdout.write("\x1b]2;Social Empires Server\x07")
 
 print (" [+] Loading game config...")
-from get_game_config import get_game_config, patch_game_config
+from get_game_config import get_game_config, get_client_game_config, patch_game_config
 
 print (" [+] Loading players...")
 from get_player_info import get_player_info, get_neighbor_info
-from sessions import load_saved_villages, all_saves_userid, all_saves_info, save_info, new_village, fb_friends_str
+from sessions import save_lock, session as get_session, save_session, load_saved_villages, all_saves_userid, all_saves_info, save_info, new_village, fb_friends_str
 load_saved_villages()
 
 print (" [+] Loading server...")
 from flask import Flask, render_template, send_from_directory, request, redirect, session
 from flask.debughelpers import attach_enctype_error_multidict
 from command import command
+import cheats
+from backups_daily import start_daily_backups
 from engine import timestamp_now
 from version import version_name
 from constants import Constant
@@ -31,6 +34,7 @@ host = '127.0.0.1'
 port = 5050
 
 app = Flask(__name__, template_folder=TEMPLATES_DIR)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 print (" [+] Configuring server routes...")
 
@@ -53,7 +57,7 @@ def login():
         session['GAMEVERSION'] = request.form['GAMEVERSION']
         print("[LOGIN] USERID:", request.form['USERID'])
         print("[LOGIN] GAMEVERSION:", request.form['GAMEVERSION'])
-        return redirect("/play.html")
+        return redirect("/ruffle.html")
     # Login page
     if request.method == 'GET':
         saves_info = all_saves_info()
@@ -93,14 +97,20 @@ def ruffle():
     GAMEVERSION = session['GAMEVERSION']
     print("[RUFFLE] USERID:", USERID)
     print("[RUFFLE] GAMEVERSION:", GAMEVERSION)
-    return render_template("ruffle.html", save_info=save_info(USERID), serverTime=timestamp_now(), version=version_name, GAMEVERSION=GAMEVERSION, SERVERIP=host)
+    return render_template("ruffle.html", save_info=save_info(USERID), serverTime=timestamp_now(), friendsInfo=fb_friends_str(USERID), version=version_name, GAMEVERSION=GAMEVERSION, SERVERIP=host)
 
 
 @app.route("/new.html")
 def new():
     session['USERID'] = new_village()
     session['GAMEVERSION'] = "SocialEmpires0926bsec.swf"
-    return redirect("play.html")
+    return redirect("ruffle.html")
+
+@app.route("/ruffle/<path:path>")
+def ruffle_files(path):
+    # Self-hosted Ruffle (templates/ruffle, see VERSION there)
+    mimetype = "application/wasm" if path.endswith(".wasm") else None
+    return send_from_directory(TEMPLATES_DIR + "/ruffle", path, mimetype=mimetype)
 
 @app.route("/crossdomain.xml")
 def crossdomain():
@@ -146,15 +156,15 @@ def static_assets_loader(path):
             URL = f"https://static.socialpointgames.com/static/socialempires/assets/{path}"
             try:
                 response = urllib.request.urlretrieve(URL, f"{BASE_DIR}/download_assets/assets/{path}")
-            except urllib.error.HTTPError:
+            except (urllib.error.URLError, OSError):
                 return ("", 404)
 
             print(f"====== DOWNLOADED ASSET: {URL}")
-            return send_from_directory("{BASE_DIR}/download_assets/assets", path)
+            return send_from_directory(f"{BASE_DIR}/download_assets/assets", path)
         else:
             # Use downloaded CDN asset
             print(f"====== USING EXTERNAL: download_assets/assets/{path}")
-            return send_from_directory("{BASE_DIR}/download_assets/assets", path)
+            return send_from_directory(f"{BASE_DIR}/download_assets/assets", path)
     else:
         # Use provided asset
         return send_from_directory(ASSETS_DIR, path)
@@ -181,7 +191,7 @@ def get_game_config_response():
     language = request.values['language']
 
     print(f"get_game_config: USERID: {USERID}. --", request.values)
-    return get_game_config()
+    return get_client_game_config()
 
 @app.route("/dynamic.flash1.dev.socialpoint.es/appsfb/socialempiresdev/srvempires/get_player_info.php", methods=['POST'])
 def get_player_info_response():
@@ -244,7 +254,7 @@ def flash_sync_error_response():
         reason = "reload On End Attack"
 
     print("flash_sync_error", reason, ". --", request.values)
-    return redirect("/play.html")
+    return redirect("/ruffle.html")
 
 @app.route("/dynamic.flash1.dev.socialpoint.es/appsfb/socialempiresdev/srvempires/command.php", methods=['POST'])
 def command_response():
@@ -265,9 +275,45 @@ def command_response():
     data_payload = data_str[65:]
     data = json.loads(data_payload)
 
-    command(USERID, data)
+    with save_lock:
+        command(USERID, data)
     
     return ({"result": "success"}, 200)
+
+## LOCAL CHEAT PANEL (see templates/ruffle.html). Only for the machine running the server.
+
+@app.route("/cheat/grant", methods=['POST'])
+def cheat_grant():
+    # Same machine only; JSON content type + same-origin check keep other websites from calling this.
+    origin = request.headers.get("Origin")
+    if request.remote_addr != "127.0.0.1" or not request.is_json \
+            or (origin is not None and origin != request.host_url.rstrip("/")):
+        return ({"error": "forbidden"}, 403)
+    USERID = session.get('USERID')
+    if USERID is None or get_session(USERID) is None:
+        return ({"error": "not logged in"}, 401)
+    body = request.get_json(silent=True) or {}
+    action = body.get("action")
+    try:
+        with save_lock:
+            save = get_session(USERID)
+            levels = get_game_config()["levels"]
+            if action == "add":
+                cheats.add_resource(save, body["resource"], int(body["amount"]))
+            elif action == "level":
+                cheats.set_level(save, levels, save["maps"][0]["level"] + int(body.get("delta", 1)))
+            elif action == "max_level":
+                cheats.set_level(save, levels, cheats.max_level(levels))
+            elif action == "skip_tutorial":
+                cheats.skip_tutorial(save)
+            else:
+                return ({"error": "unknown action"}, 400)
+            save_session(USERID)
+            result = cheats.summary(save)
+    except (KeyError, ValueError, TypeError) as e:
+        return ({"error": str(e)}, 400)
+    print(f"[CHEAT] {action} {body} -> ok")
+    return (result, 200)
 
 @app.route("/dynamic.flash1.dev.socialpoint.es/appsfb/socialempiresdev/srvempires/get_continent_ranking.php")
 def get_continent_ranking_response():
@@ -303,5 +349,6 @@ def get_continent_ranking_response():
 print (" [+] Running server...")
 
 if __name__ == '__main__':
+    start_daily_backups()
     app.secret_key = 'SECRET_KEY'
     app.run(host=host, port=port, debug=False)

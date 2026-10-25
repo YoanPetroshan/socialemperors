@@ -1,6 +1,8 @@
 import json
 import os
 import copy
+import tempfile
+import threading
 import uuid
 import random
 from flask import session
@@ -12,6 +14,8 @@ from version import migrate_loaded_save
 from constants import Constant
 
 from bundle import VILLAGES_DIR, SAVES_DIR
+
+save_lock = threading.RLock()  # server.py holds it while changing a save in memory
 
 __villages = {}  # ALL static neighbors
 '''__villages = {
@@ -242,7 +246,11 @@ def save_session(USERID: str):
     # TODO 
     file = f"{USERID}.save.json"
     print(f" * Saving village at {file}... ", end='')
-    village = session(USERID)
-    with open(os.path.join(SAVES_DIR, file), 'w') as f:
-        json.dump(village, f, indent=4)
+    with save_lock:
+        village = session(USERID)
+        # Write to a temp file and rename, so a crash can never leave a half-written save.
+        fd, tmp = tempfile.mkstemp(dir=SAVES_DIR, suffix=".tmp")
+        with os.fdopen(fd, 'w') as f:
+            json.dump(village, f, indent=4)
+        os.replace(tmp, os.path.join(SAVES_DIR, file))
     print("Done.")

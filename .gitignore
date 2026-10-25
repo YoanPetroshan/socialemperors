@@ -12,3 +12,7 @@ Include/
 Lib/
 Scripts/
 pyvenv.cfg
+backups/
+time_scale.json
+logs/
+Social Empires.app/
